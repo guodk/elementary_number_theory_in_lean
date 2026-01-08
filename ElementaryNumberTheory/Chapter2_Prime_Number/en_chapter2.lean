@@ -1,7 +1,8 @@
 import Mathlib
 
+set_option maxHeartbeats 0
 /-!
-# Elementary Number Theory - Chapter 2: Prime Numbers
+#### Elementary Number Theory - Chapter 2: Prime Numbers
 **Source:** Gareth A. Jones and J. Mary Jones, Springer Undergraduate Mathematics Series.
 
 This file contains the formal statements of the theorems in Chapter 2.
@@ -15,35 +16,72 @@ section PrimeFactorisation
 /-! ## 2.1 Prime numbers and prime-power factorisations -/
 
 /-
-### Definition: Prime Number
+#### Definition: Prime Number
 An integer p > 1 is said to be prime if the only positive divisors of p are 1 and p itself.
 (Formalized via `Nat.Prime` class)
 -/
-
+/- ####check Nat.Prime -/
 /-
-### Lemma 2.1
+#### Lemma 2.1
 Let p be prime, and let a and b be any integers.
 (a) either p divides a, or a and p are coprime;
 (b) if p divides ab, then p divides a or p divides b.
 -/
-theorem lemma_2_1_a (p a : ℕ) (hp : p.Prime) :
-  p ∣ a ∨ Nat.Coprime a p := by
-  sorry
+theorem lemma_2_1_a (p : ℕ) (a : ℤ) (hp : p.Prime) :
+  (p : ℤ) ∣ a ∨ IsCoprime a p := by
+  have hpZ : _root_.Prime (p : ℤ) := (Nat.prime_iff_prime_int).1 hp
+  by_cases h : (p : ℤ) ∣ a
+  · exact Or.inl h
+  · right
+    have hcop : IsCoprime (p : ℤ) a :=
+      (Prime.coprime_iff_not_dvd (p := (p : ℤ)) (n := a) hpZ).2 h
+    -- swap arguments in `IsCoprime` manually
+    rcases hcop with ⟨x, y, hxy⟩
+    refine ⟨y, x, ?_⟩
+    -- `hxy : x * (p:ℤ) + y * a = 1`
+    -- want: `y * a + x * (p:ℤ) = 1`
+    simpa [add_comm] using hxy
 
-theorem lemma_2_1_b (p a b : ℕ) (hp : p.Prime) :
-  p ∣ (a * b) → p ∣ a ∨ p ∣ b := by
-  sorry
+end PrimeFactorisation
+end ElementaryNumberTheory.Chapter2
+
+
+theorem lemma_2_1_b (p : ℕ) (a b : ℤ) (hp : p.Prime) :
+  (p : ℤ) ∣ (a * b) → (p : ℤ) ∣ a ∨ (p : ℤ) ∣ b := by
+  intro h
+  exact Int.Prime.dvd_mul' (m := a) (n := b) hp h
 
 /-
-### Corollary 2.2
+#### Corollary 2.2
 If p is prime and p divides a_1 ... a_k, then p divides a_i for some i.
 -/
 theorem corollary_2_2 (p : ℕ) (as : List ℕ) (hp : p.Prime) :
   p ∣ as.prod → ∃ a ∈ as, p ∣ a := by
-  sorry
+  induction as with
+  | nil =>
+      intro h
+      -- prod [] = 1, contradicting that a prime does not divide 1
+      have : p ∣ (1 : ℕ) := by simpa [List.prod_nil] using h
+      exact (hp.not_dvd_one this).elim
+  | cons a as ih =>
+      intro h
+      -- use divisibility of a product
+      have h' : p ∣ a * as.prod := by simpa [List.prod_cons] using h
+      have : p ∣ a ∨ p ∣ as.prod := (hp.dvd_mul).1 h'
+      cases this with
+      | inl ha =>
+          exact ⟨a, by simp, ha⟩
+      | inr hasProd =>
+          rcases ih hasProd with ⟨x, hxmem, hxdvd⟩
+          exact ⟨x, by simp [hxmem], hxdvd⟩
 
+theorem corollary_2_2' (p : ℕ) (as : List ℤ) (hp : p.Prime) :
+  (p : ℤ) ∣ as.prod → ∃ a ∈ as, (p : ℤ) ∣ a := by
+  intro h
+  have hpZ : _root_.Prime (p : ℤ) := (Nat.prime_iff_prime_int).1 hp
+  exact (Prime.dvd_prod_iff (p := (p : ℤ)) (L := as) hpZ).1 h
 /-
-### Theorem 2.3 (Fundamental Theorem of Arithmetic)
+#### Theorem 2.3 (Fundamental Theorem of Arithmetic)
 Each integer n > 1 has a prime-power factorisation
 n = p_1^{e_1} ... p_k^{e_k},
 where p_1, ..., p_k are distinct primes and e_i are positive integers;
@@ -54,17 +92,23 @@ this factorisation is unique, apart from permutations of the factors.
 -- We state the existence via the property that the product of prime factors equals n.
 theorem theorem_2_3_fundamental_theorem (n : ℕ) (hn : n > 1) :
   ∃ l : List ℕ, (∀ p ∈ l, p.Prime) ∧ l.prod = n := by
-  sorry
+  refine ⟨n.primeFactorsList, ?_, ?_⟩
+  · intro p hp
+    exact Nat.prime_of_mem_primeFactorsList hp
+  · have hn0 : n ≠ 0 := by
+      exact ne_of_gt (Nat.zero_lt_one.trans hn)
+    simpa using (Nat.prod_primeFactorsList (n := n) hn0)
 
 /-
-### Lemma 2.4
+#### Lemma 2.4
 If a_1, ..., a_r are mutually coprime positive integers, and a_1 ... a_r is an m-th
 power for some integer m >= 2, then each a_i is an m-th power.
 -/
 theorem lemma_2_4 (as : List ℕ) (m : ℕ) (hm : m ≥ 2)
+  (h_pos : ∀ a ∈ as, a > 0)
   (h_coprime : as.Pairwise Nat.Coprime)
   (h_power : ∃ k, as.prod = k ^ m) :
-  ∀ a ∈ as, ∃ k, a = k ^ m := by
+   ∀ a ∈ as, ∃ t, a = t ^ m := by
   sorry
 
 /-
@@ -75,7 +119,6 @@ theorem corollary_2_5 (m : ℕ) (h_not_square : ¬ ∃ k, m = k ^ 2) :
   Irrational (Real.sqrt m) := by
   sorry
 
-end PrimeFactorisation
 
 section Distribution
 
@@ -110,7 +153,7 @@ theorem theorem_2_9_primes_4q_plus_3 :
 ### Theorem 2.10 (Dirichlet's Theorem)
 If a and b are coprime integers then there are infinitely many primes of the form aq + b.
 -/
-theorem theorem_2_10_dirichlet (a b : ℕ) (h_coprime : Nat.Coprime a b) :
+theorem theorem_2_10_dirichlet (a b : ℤ) (h_coprime : IsCoprime a b) :
   Set.Infinite { p : ℕ | p.Prime ∧ p % a = b } := by
   sorry
 
@@ -159,7 +202,8 @@ An integer n > 1 is composite if and only if it is divisible by some prime p <= 
 theorem lemma_2_14 (n : ℕ) (hn : n > 1) :
   ¬ n.Prime ↔ ∃ p, p.Prime ∧ p ∣ n ∧ p ^ 2 ≤ n := by
   sorry
+theorem lemma_2_14' (n : ℕ) (hn : n > 1) :
+  ¬ n.Prime ↔ ∃ p, p.Prime ∧ p ∣ n ∧ p ≤ Nat.sqrt n := by
+  sorry
 
 end PrimalityTesting
-
-end ElementaryNumberTheory.Chapter2
